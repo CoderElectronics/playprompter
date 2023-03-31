@@ -1,0 +1,33 @@
+{
+  "name": "webrenderer",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build-css": "tailwindcss build style.css -o public/dist/style.css",
+    "build-alpine": "npx esbuild index.js --outfile=public/dist/bundle.js --bundle",
+    "build-dist": "mkdir public/dist; npm run build-css; npm run build-alpine",
+    "serve": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "autoprefixer": "^10.4.13",
+    "postcss": "^8.4.21",
+    "tailwindcss": "^3.2.4"
+  },
+  "dependencies": {
+    "@alpinejs/persist": "^3.11.1",
+    "@mdi/font": "^7.1.96",
+    "alpinejs": "^3.2.2",
+    "daisyui": "^2.47.0",
+    "esbuild": "^0.12.15",
+    "express": "^4.18.2",
+    "finalhandler": "^1.2.0",
+    "google-tts-api": "^2.0.2",
+    "js-event-bus": "^1.1.1",
+    "loglevel": "^1.8.1",
+    "serve-static": "^1.15.0"
+  }
+}

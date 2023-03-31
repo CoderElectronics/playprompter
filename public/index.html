@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>PlayPrompter</title>
+        
+        <link rel="stylesheet" href="dist/style.css">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.1.96/css/materialdesignicons.min.css">
+        <script src="dist/bundle.js"></script>
+    </head>
+    
+    <body class="min-h-screen">
+        <div id="maincontent" x-data="{
+                gl_theme: $persist('cupcake'),
+                uiLines: [],
+                cur_line: 0,
+                hidden_char: '',    
+
+                initial_opt: {
+                    scripts: [],
+                    play: '',
+                    scene: '',
+
+                    chrs: [],
+                    lns: ''
+                },               
+
+                boxparams: {
+                    listen_mode: false,
+                    manual_prompt_mode: false,
+                    timeout_mode: 0,
+                    reader_timeout: 4,
+                    manual_mode: false,
+                    skipped: 0,
+                    reading_speed: 1
+                },
+
+                windows: {
+                    show_read: false,
+
+                    my_lines: 0,
+                    other_lines: 0
+                }
+            }" :data-theme="gl_theme" class="flex flex-col min-h-screen from-primary to-secondary bg-gradient-to-br">
+            
+            <!-- stuff here -->
+            <script src="macbeth.js"></script>
+
+            <script>
+                /* main variable stack */
+                var mainStack = document.getElementById("maincontent")._x_dataStack[0];
+
+                /* helper functions */
+                function sendTTS(line, slow, voice) {
+                    return new Promise(function(resolve, reject) {
+                        fetch(['/ttsurl?line=', btoa(line), "&slow=", slow, "&voice=", btoa(voice)].join(""))
+                            .then(response => response.json())
+                            .then(data => {
+                                var a = new Audio(data.url);
+                                a.play();
+                                a.onended = resolve;
+                            });
+                    });
+                }
+
+                function sleep(ms) {
+                    return new Promise(resolve => setTimeout(resolve, ms));
+                }
+
+                function parse_scene(script, scene_chrs) {
+                    var lines = script.split("\n");
+                    var tts_script = [];
+                    var curr_char = "";
+
+                    lines.forEach(function(ln) {
+                        var lineswap = scene_chrs.filter(x => ln.includes(x[0]));
+            
+                        if (lineswap.length > 0) {
+                            /* chars available to swap to */
+                            curr_char = lineswap[0][0];
+                            
+                            if (tts_script.length == 0 || tts_script[tts_script.length-1].char!=curr_char) {
+                                /* line isn't current character and not first */
+                                if(tts_script.length > 0) {
+                                    if (tts_script[tts_script.length-1].line=="") {
+                                        tts_script.pop();
+                                    }
+                                }
+                                tts_script.push({
+                                    char: curr_char,
+                                    line: ""
+                                });
+                            }
+                        } else {
+                            /* no chars available */
+                            tts_script[tts_script.length-1].line += " "+ln;
+                        }
+                    });
+
+                    return tts_script;
+                }
+
+                /* play reading sequence */
+                (async function(){
+                    log.log("Init sequence");
+
+                    mainStack.initial_opt.scripts = [script, script2];
+                })();
+
+                async function processSettings(){
+                    var chrs = mainStack.initial_opt.chrs;
+                    var lns = mainStack.initial_opt.lns;
+
+                    mainStack.uiLines = parse_scene(lns, chrs);
+                    mainStack.hidden_char = chrs.filter(x => x[1]=='')[0][0];
+
+                    mainStack.windows.my_lines = mainStack.uiLines.filter(x => x.char==mainStack.hidden_char).length;
+                    mainStack.windows.other_lines = mainStack.uiLines.filter(x => x.char!=mainStack.hidden_char).length;
+
+                    for (idx in mainStack.uiLines) {
+                        mainStack.uiLines[idx].hidden_line = "...";
+                        mainStack.uiLines[idx].hintnum = 0;
+                        mainStack.uiLines[idx].mode = "";
+                        mainStack.uiLines[idx].uid = idx;
+                    }
+
+                    if(mainStack.boxparams.manual_mode == false) {
+                        nextLine();
+                    }
+                }
+
+                async function nextLine() {
+                    var old_manual_stat = mainStack.boxparams.manual_mode;
+                    mainStack.boxparams.manual_mode = false;
+
+                    while (mainStack.cur_line < mainStack.uiLines.length && (mainStack.boxparams.manual_mode == false)) {
+                        mainStack.boxparams.manual_mode = old_manual_stat;
+                        var idx = mainStack.cur_line;
+                        
+                        /* update list view */
+                        try {
+                            document.getElementById('line-node-'+mainStack.uiLines[idx].uid).scrollIntoViewIfNeeded();
+                        } catch (err) {}
+
+                        mainStack.uiLines[idx].mode = "bordered";
+
+                        /* reader modes */
+                        if (mainStack.uiLines[idx].char == mainStack.hidden_char) {
+                            /* user as character */
+                            mainStack.windows.my_lines -= 1;
+
+                            var a = new Audio("/pop.wav");
+                            a.play();
+                            await sleep(mainStack.boxparams.reader_timeout*1000);
+                        } else {
+                            /* auto read */
+                            mainStack.windows.other_lines -= 1;
+
+                            await sendTTS(mainStack.uiLines[idx].line, 1 - mainStack.boxparams.reading_speed, mainStack.initial_opt.chrs.filter(x => mainStack.uiLines[idx].char.includes(x[0]))[0][1]);
+                        }
+
+                        await sleep(mainStack.boxparams.timeout_mode*1000);
+
+                        /* clean up */
+                        mainStack.uiLines[idx].mode = "";
+                        mainStack.uiLines[idx].hintnum = 0;
+                        mainStack.uiLines[idx].hidden_line = "...";
+
+                        if (mainStack.boxparams.skipped == 0) {
+                            mainStack.cur_line += 1;
+                        } else {
+                            mainStack.boxparams.skipped = 0;
+                        }
+                    }
+                }
+            </script>
+
+            <div class="flex navbar bg-base-100" id="sm_navbar">
+                <div class="flex-none">
+                    <button class="btn btn-square btn-ghost">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block w-5 h-5 stroke-current"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                    </button>
+                </div>
+                
+                <div class="flex-1">
+                    <a class="btn btn-ghost normal-case text-xl">PlayPrompter v1.0</a>
+                </div>
+
+                <!-- Modular tabs -->
+                <div class="flex-none" x-transition x-show="windows.show_read">
+                    <div class="tabs tabs-boxed">
+                        <a class="tab" x-transition @click="window.location.reload()">Change Readers</a> 
+                    </div>
+                    <div class="divider divider-horizontal"></div>
+                </div>
+
+                <div class="flex-none">
+                    <div class="tabs tabs-boxed">
+                        <select class="tab select select-ghost w-32 max-w-xs select-sm" x-model="gl_theme">
+                            <option disabled selected>Theme</option>
+                            <option value="coffee">Coffee</option>
+                            <option value="cupcake">Cupcake</option>
+                            <option value="emerald">Emerald</option>
+                            <option value="winter">Winter</option>
+                            <option value="lemonade">Lemonade</option>
+                            <option value="night">Night</option>
+                            <option value="business">Business</option>
+                            <option value="autumn">Autumn</option>
+                            <option value="black">Black</option>
+                            <option value="dark">Dark</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- main window content -->
+            <div class="flex flex-grow flex-row glass">
+                <!-- setup page -->
+                <div class="flex flex-grow flex-row items-center justify-center" x-transition x-show="!windows.show_read">
+                    <div class="flex flex-col px-6">
+                        <div class="card bg-base-100 shadow-xl">
+                            <div class="card-body">
+                                <h2 class="card-title">Welcome to PlayPrompter!</h2>
+                                <div class="flex flex-col" x-data="{
+                                    updatePlays() {
+                                        log.debug('Updating display...')
+                                        var targetplay = initial_opt.scripts.filter(x => x.name==initial_opt.play)[0].scenes.filter(x => x.name==initial_opt.scene)[0];
+
+                                        initial_opt.lns = targetplay.lns;
+                                        initial_opt.chrs = targetplay.chrs;
+                                    }
+                                }">
+                                    <div class="flex flex-row">
+                                        <div class="flex flex-col w-96">
+                                            <div class="flex-none">
+                                                <p class="pt-2">Select the play and scene number to load a performance.</p>
+
+                                                <select x-model="initial_opt.play" class="select select-primary w-full max-w-xs mt-4">
+                                                    <option disabled selected>Select a play...</option>
+                                                    <template x-for="scrp in initial_opt.scripts">
+                                                        <option :value="scrp.name" x-text="scrp.name"></option>
+                                                    </template>
+                                                </select>
+
+                                                <select @change="updatePlays()" x-model="initial_opt.scene" class="select select-primary w-full max-w-xs mt-2">
+                                                    <option disabled selected>Select a scene...</option>
+                                                    <template x-for="scn in initial_opt.scripts.filter(x => x.name==initial_opt.play)[0].scenes">
+                                                        <option :value="scn.name" x-text="scn.name"></option>
+                                                    </template>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div class="flex flex-col w-96">
+                                            <div class="flex-none">
+                                                <p class="pt-2">Select the roles and accents for each character.</p>
+
+                                                <b x-show="initial_opt.chrs.length==0"><br>Please select a play and scene first!</b>
+                                                <template x-for="char in initial_opt.chrs">
+                                                    <div class="form-control w-84">
+                                                        <label class="cursor-pointer label mt-2">
+                                                            <span class="label-text" x-text="char[0]"></span>
+                                                            <select class="tab select select-secondary w-48 max-w-xs select-sm" x-model="char[1]">
+                                                                <option disabled selected>Character Mode</option>
+                                                                <option value="">You</option>
+                                                                <option value="en-US">TTS American English</option>
+                                                                <option value="en-GB">TTS Brittish</option>
+                                                            </select>
+                                                        </label>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <br>
+                                <div class="card-actions justify-end">
+                                    <button class="btn btn-primary" @click="windows.show_read = true; processSettings()">Start</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- actual reader page -->
+                <div class="flex flex-grow flex-row items-center justify-center" x-transition x-show="windows.show_read">
+                    <div class="flex flex-col px-6">
+                        <div class="card w-96 bg-base-100 shadow-xl">
+                            <div class="card-body">
+                                <h2 class="card-title">Options</h2>
+                                <div class="flex flex-col" x-data="{
+                                    skipLine() {
+                                        if (boxparams.manual_mode == false) {
+                                            uiLines[cur_line].mode = '';
+                                            uiLines[cur_line].hintnum = 0;
+                                            uiLines[cur_line].hidden_line = '...';
+                                            uiLines[cur_line+1].mode = 'bordered';
+                                            cur_line += 1;
+                                            boxparams.skipped = 1;
+                                        } else {
+                                            nextLine();
+                                        }
+                                    }
+                                }">
+                                    <div class="form-control w-84">
+                                        <label class="cursor-pointer label">
+                                            <span class="label-text">Start reading/Skip</span> 
+                                            <button class="btn btn-active btn-ghost" @click="skipLine()">Next</button>
+                                        </label>
+                                    </div>
+
+                                    <div class="form-control w-84">
+                                        <label class="cursor-pointer label">
+                                            <span class="label-text">Listener mode</span>
+                                            <input x-model="boxparams.listen_mode" type="checkbox" class="toggle toggle-primary" checked />
+                                        </label>
+                                    </div>
+
+                                    <div class="form-control w-84">
+                                        <label class="cursor-pointer label">
+                                        <span class="label-text">Manual mode</span>
+                                            <input x-model="boxparams.manual_mode" type="checkbox" class="toggle toggle-primary" checked />
+                                        </label>
+                                    </div>
+
+                                    <div class="form-control w-84">
+                                        <label class="cursor-pointer label">
+                                            <span class="label-text">Reading speed</span>
+                                            <input x-model="boxparams.reading_speed" type="range" min="0" max="1" value="1" step="1" class="range range-primary w-32" />
+                                        </label>
+                                    </div>
+
+                                    <div class="form-control w-84">
+                                        <label class="cursor-pointer label">
+                                            <span class="label-text">Time between lines</span>
+                                            <input x-model="boxparams.timeout_mode" type="range" min="0" max="5" value="0" step="1" class="range range-primary w-32" />
+                                        </label>
+                                    </div>
+
+                                    <div class="form-control w-84">
+                                        <label class="cursor-pointer label">
+                                            <span class="label-text">Human wait time</span>
+                                            <input x-model="boxparams.reader_timeout" type="range" min="1" max="15" value="4" step="1" class="range range-primary w-32" />
+                                        </label>
+                                    </div>
+                                </div>
+                                <br>
+                                <div class="card-actions justify-end" x-data="{
+                                    showHint() {
+                                        var cline = uiLines.filter(x=>x.mode=='bordered')[0];
+                                        cline.hintnum++;
+                                        
+                                        var destpart = cline.line.split(' ').slice(0, cline.hintnum).join(' ');
+                                        if (destpart.replace(/\s/g, '')=='') {
+                                            cline.hintnum++;
+                                            destpart = cline.line.split(' ').slice(0, cline.hintnum).join(' ');
+                                        }
+
+                                        cline.hidden_line = destpart;
+                                    },
+                                    showLine() {
+                                        var cline = uiLines.filter(x=>x.mode=='bordered')[0];
+                                        cline.hidden_line = cline.line;
+                                    }
+                                }">
+                                    <button class="btn btn-primary" @click="showHint()">Show Hint</button>
+                                    <button class="btn btn-primary" @click="showLine()">Show Line</button>
+                                </div>
+                            </div>
+                        </div>
+                        <br>
+                        <div class="stats shadow w-96">
+                            <div class="stat">
+                                <div class="stat-figure text-secondary">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block w-8 h-8 stroke-current"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                </div>
+                                <div class="stat-title">Your Lines</div>
+                                <div class="stat-value" x-text="windows.my_lines"></div>
+                            </div>
+                            
+                            <div class="stat">
+                                <div class="stat-figure text-secondary">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="inline-block w-8 h-8 stroke-current"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+                                </div>
+                                <div class="stat-title">Other Lines</div>
+                                <div class="stat-value" x-text="windows.other_lines"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex flex-col px-6">
+                        <div class="rounded-box overflow-scroll" style="max-height: 600px">
+                            <ul class="menu bg-base-100 w-96 rounded-box">
+                                <template x-for="lm in uiLines">
+                                    <li :id="'line-node-'+lm.uid" :class="lm.mode"><a x-html="'\<b>'+lm.char+':\</b> '+( lm.char==hidden_char ? lm.hidden_line : lm.line)"></li>
+                                </template>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- end useful stuff here -->
+        </div>
+    </body>
+</html>
