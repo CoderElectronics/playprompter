@@ -238,14 +238,14 @@
                                                 <p class="pt-2">Select the play and scene number to load a performance.</p>
 
                                                 <select x-model="initial_opt.play" class="select select-primary w-full max-w-xs mt-4">
-                                                    <option disabled selected>Select a play...</option>
+                                                    <option selected>Select a play...</option>
                                                     <template x-for="scrp in initial_opt.scripts">
                                                         <option :value="scrp.name" x-text="scrp.name"></option>
                                                     </template>
                                                 </select>
 
                                                 <select @change="updatePlays()" x-model="initial_opt.scene" class="select select-primary w-full max-w-xs mt-2">
-                                                    <option disabled selected>Select a scene...</option>
+                                                    <option selected>Select a scene...</option>
                                                     <template x-for="scn in initial_opt.scripts.filter(x => x.name==initial_opt.play)[0].scenes">
                                                         <option :value="scn.name" x-text="scn.name"></option>
                                                     </template>
